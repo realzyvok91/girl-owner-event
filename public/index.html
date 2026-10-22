@@ -440,7 +440,7 @@
           alert('Registered successfully!');
           fetchStatus();
         } else {
-          alert('Registration Blocked: ' + (data.error || 'Unknown server error'));
+          alert(data.error || 'Registration failed.');
         }
       } catch (err) {
         alert('Network Error: ' + err.message);
