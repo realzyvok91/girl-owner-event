@@ -19,7 +19,9 @@ const BOT_TOKEN = 'MTU2MjczNDQ3NDI0MzA4ODQxNg.Gao1e7.GGpU5j3bEka3Xh_miXkKLYH3sS6
 const CLIENT_ID = '1562734474243088416';
 const CLIENT_SECRET = 'SEiL4-4jv5E36OIhbpNOnf-Bvup8amJ1';
 
-// Helper function for HTTPS POST requests (Works on ALL Node versions)
+const REDIRECT_URI = 'https://girl-owner-event.onrender.com/api/auth/discord/callback';
+
+// Helper function for HTTPS POST requests
 function httpsPost(url, data) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
@@ -54,14 +56,11 @@ function httpsPost(url, data) {
 function httpsGet(url, token) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
-
     const options = {
       hostname: u.hostname,
       path: u.pathname,
       method: 'GET',
-      headers: {
-        'Authorization': token
-      }
+      headers: { 'Authorization': token }
     };
 
     const req = https.request(options, (res) => {
@@ -117,18 +116,9 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.login(BOT_TOKEN).catch(err => console.error('Bot login error:', err));
 
-function getRedirectUri(req) {
-  const host = req.get('host');
-  if (host.includes('localhost')) {
-    return `http://${host}/api/auth/discord/callback`;
-  }
-  return `https://${host}/api/auth/discord/callback`;
-}
-
 // 1. Redirect user to Discord
 app.get('/api/auth/discord', (req, res) => {
-  const redirectUri = getRedirectUri(req);
-  const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify`;
+  const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`;
   res.redirect(discordAuthUrl);
 });
 
@@ -137,27 +127,27 @@ app.get('/api/auth/discord/callback', async (req, res) => {
   const { code } = req.query;
   if (!code) return res.redirect('/?error=no_code');
 
-  const redirectUri = getRedirectUri(req);
-
   try {
+    console.log('Exchanging auth code with Discord...');
     const tokenData = await httpsPost('https://discord.com/api/oauth2/token', {
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
       code: code,
       grant_type: 'authorization_code',
-      redirect_uri: redirectUri,
+      redirect_uri: REDIRECT_URI,
       scope: 'identify'
     });
 
+    console.log('Discord Token Response:', tokenData);
+
     if (!tokenData.access_token) {
-      console.error('Discord Token Error:', tokenData);
-      return res.redirect('/?error=token_failed');
+      return res.redirect(`/?error=token_failed`);
     }
 
     const userData = await httpsGet('https://discord.com/api/users/@me', `${tokenData.token_type} ${tokenData.access_token}`);
+    console.log('Discord User Data:', userData);
 
     if (!userData.id) {
-      console.error('Discord User Profile Error:', userData);
       return res.redirect('/?error=user_fetch_failed');
     }
 
