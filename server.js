@@ -72,21 +72,30 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.login(BOT_TOKEN).catch(err => console.error('Bot login error:', err));
 
-// --- ROLE VERIFICATION ---
+// --- FORCED MEMBER & ROLE VERIFICATION ---
 async function verifyUserRole(userId) {
   if (userId === ADMIN_USER_ID) return true; // Admin bypass
 
   try {
     const guild = await client.guilds.fetch(GUILD_ID);
-    if (!guild) return false;
-
-    const member = await guild.members.fetch(userId);
-    if (member && member.roles.cache.has(REQUIRED_ROLE_ID)) {
-      return true;
+    if (!guild) {
+      console.log('Guild not found by bot');
+      return false;
     }
-    return false;
+
+    // Force fetch member from Discord servers (bypasses stale cache)
+    const member = await guild.members.fetch({ user: userId, force: true });
+    if (!member) {
+      console.log(`Member ${userId} not found in guild`);
+      return false;
+    }
+
+    // Check if member has the required role ID
+    const hasRole = member.roles.cache.has(REQUIRED_ROLE_ID);
+    console.log(`Role check for user ${userId}: ${hasRole}`);
+    return hasRole;
   } catch (err) {
-    console.error(`Role check error for user ${userId}:`, err.message);
+    console.error(`Role verification error for user ${userId}:`, err.message);
     return false;
   }
 }
@@ -108,7 +117,7 @@ app.get('/api/status', (req, res) => {
   res.json(eventState);
 });
 
-// Candidate Registration with Explicit Role Check
+// Candidate Registration with Force-Fetched Role Verification
 app.post('/api/register', async (req, res) => {
   const { id, name, avatar } = req.body;
   if (!id || !name) return res.status(400).json({ error: 'Missing details.' });
