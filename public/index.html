@@ -119,7 +119,7 @@
           </h3>
           <span id="admin-status-badge" class="px-3 py-1 rounded-full text-xs font-bold uppercase bg-gray-800 text-gray-400">STATUS: STOPPED</span>
         </div>
-        <p class="text-xs text-gray-300">As the event owner, you can manage the sprint timer and bot tracking below:</p>
+        <p class="text-xs text-gray-300">Logged in as Authorized Owner. Manage event state below:</p>
         <div class="flex flex-wrap gap-3">
           <button onclick="startEvent()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition flex items-center gap-2">
             <i class="fa-solid fa-play"></i> Start Event
@@ -273,12 +273,13 @@
   <!-- Client-Side Dashboard & OAuth Script -->
   <script>
     const CLIENT_ID = '1562734474243088416';
+    const ADMIN_USER_ID = '1139956195696836701';
+
     let currentUser = JSON.parse(localStorage.getItem('discord_user')) || null;
     let userVote = localStorage.getItem('user_voted_candidate') || null;
     let eventState = { active: false, candidates: [], startTime: null };
 
     window.addEventListener('DOMContentLoaded', async () => {
-      // Handle implicit Discord OAuth redirect hash
       const hash = window.location.hash;
       if (hash && hash.includes('access_token')) {
         const params = new URLSearchParams(hash.substring(1));
@@ -322,8 +323,12 @@
         document.getElementById('user-name').innerText = currentUser.username;
         document.getElementById('user-avatar').src = currentUser.avatar;
 
-        // Show Admin Panel button if owner logged in
-        document.getElementById('admin-panel-btn').classList.remove('hidden');
+        // ONLY show Admin Panel button if logged in user matches exact ID: 1139956195696836701
+        if (currentUser.id === ADMIN_USER_ID) {
+          document.getElementById('admin-panel-btn').classList.remove('hidden');
+        } else {
+          document.getElementById('admin-panel-btn').classList.add('hidden');
+        }
       } else {
         document.getElementById('login-btn').classList.remove('hidden');
         document.getElementById('user-profile').classList.add('hidden');
@@ -452,21 +457,36 @@
       }
     }
 
-    // --- ADMIN ACTION FUNCTIONS ---
+    // --- PROTECTED ADMIN ACTION FUNCTIONS ---
     async function startEvent() {
-      const res = await fetch('/api/admin/start', { method: 'POST' });
+      if (!currentUser) return;
+      const res = await fetch('/api/admin/start', {
+        method: 'POST',
+        headers: { 'x-user-id': currentUser.id }
+      });
       if (res.ok) { alert('Event Started!'); fetchStatus(); }
+      else { alert('Access Denied!'); }
     }
 
     async function pauseEvent() {
-      const res = await fetch('/api/admin/pause', { method: 'POST' });
+      if (!currentUser) return;
+      const res = await fetch('/api/admin/pause', {
+        method: 'POST',
+        headers: { 'x-user-id': currentUser.id }
+      });
       if (res.ok) { alert('Event Paused!'); fetchStatus(); }
+      else { alert('Access Denied!'); }
     }
 
     async function resetEvent() {
+      if (!currentUser) return;
       if (confirm('Are you sure you want to reset all candidate scores and votes?')) {
-        const res = await fetch('/api/admin/reset', { method: 'POST' });
+        const res = await fetch('/api/admin/reset', {
+          method: 'POST',
+          headers: { 'x-user-id': currentUser.id }
+        });
         if (res.ok) { alert('Event Reset!'); fetchStatus(); }
+        else { alert('Access Denied!'); }
       }
     }
 
