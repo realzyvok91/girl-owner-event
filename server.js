@@ -1,11 +1,10 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const https = require('https');
 const { Client, GatewayIntentBits } = require('discord.js');
 
 const app = express();
-
-// Force Express to recognize Render's HTTPS reverse proxy
 app.enable('trust proxy');
 
 app.use(cors());
@@ -20,7 +19,66 @@ const BOT_TOKEN = 'MTU2MjczNDQ3NDI0MzA4ODQxNg.Gao1e7.GGpU5j3bEka3Xh_miXkKLYH3sS6
 const CLIENT_ID = '1562734474243088416';
 const CLIENT_SECRET = 'SEiL4-4jv5E36OIhbpNOnf-Bvup8amJ1';
 
-// --- DISCORD BOT ---
+// Helper function for HTTPS POST requests (Works on ALL Node versions)
+function httpsPost(url, data) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const postData = new URLSearchParams(data).toString();
+
+    const options = {
+      hostname: u.hostname,
+      path: u.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData)
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        try { resolve(JSON.parse(body)); }
+        catch (e) { resolve(body); }
+      });
+    });
+
+    req.on('error', reject);
+    req.write(postData);
+    req.end();
+  });
+}
+
+// Helper function for HTTPS GET requests
+function httpsGet(url, token) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+
+    const options = {
+      hostname: u.hostname,
+      path: u.pathname,
+      method: 'GET',
+      headers: {
+        'Authorization': token
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        try { resolve(JSON.parse(body)); }
+        catch (e) { resolve(body); }
+      });
+    });
+
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+// --- DISCORD BOT INITIALIZATION ---
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -59,7 +117,6 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.login(BOT_TOKEN).catch(err => console.error('Bot login error:', err));
 
-// Dynamic Redirect URI generator that enforces HTTPS behind proxy
 function getRedirectUri(req) {
   const host = req.get('host');
   if (host.includes('localhost')) {
@@ -68,25 +125,22 @@ function getRedirectUri(req) {
   return `https://${host}/api/auth/discord/callback`;
 }
 
-// 1. Step One: Redirect User to Discord
+// 1. Redirect user to Discord
 app.get('/api/auth/discord', (req, res) => {
   const redirectUri = getRedirectUri(req);
   const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify`;
   res.redirect(discordAuthUrl);
 });
 
-// 2. Step Two: Callback from Discord
+// 2. Callback from Discord
 app.get('/api/auth/discord/callback', async (req, res) => {
   const { code } = req.query;
-  if (!code) {
-    console.error('OAuth Error: No code query parameter received');
-    return res.redirect('/?error=no_code');
-  }
+  if (!code) return res.redirect('/?error=no_code');
 
   const redirectUri = getRedirectUri(req);
 
   try {
-    const params = new URLSearchParams({
+    const tokenData = await httpsPost('https://discord.com/api/oauth2/token', {
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
       code: code,
@@ -95,27 +149,14 @@ app.get('/api/auth/discord/callback', async (req, res) => {
       scope: 'identify'
     });
 
-    const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
-      method: 'POST',
-      body: params,
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-    });
-
-    const tokenData = await tokenResponse.json();
-
-    if (!tokenResponse.ok || !tokenData.access_token) {
-      console.error('Discord Token Error Response:', tokenData);
-      return res.redirect(`/?error=token_failed`);
+    if (!tokenData.access_token) {
+      console.error('Discord Token Error:', tokenData);
+      return res.redirect('/?error=token_failed');
     }
 
-    // Fetch User Info
-    const userResponse = await fetch('https://discord.com/api/users/@me', {
-      headers: { authorization: `${tokenData.token_type} ${tokenData.access_token}` }
-    });
+    const userData = await httpsGet('https://discord.com/api/users/@me', `${tokenData.token_type} ${tokenData.access_token}`);
 
-    const userData = await userResponse.json();
-
-    if (!userResponse.ok) {
+    if (!userData.id) {
       console.error('Discord User Profile Error:', userData);
       return res.redirect('/?error=user_fetch_failed');
     }
@@ -178,4 +219,4 @@ app.get('*', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🌐 Server listening on port ${PORT}`));
+app.listen(PORT, () => console.log(`🌐 Server running on port ${PORT}`));
