@@ -4,8 +4,6 @@ const path = require('path');
 const { Client, GatewayIntentBits } = require('discord.js');
 
 const app = express();
-
-// Enable trust proxy so Express correctly detects HTTPS on hostings like Render
 app.enable('trust proxy');
 
 app.use(cors());
@@ -15,10 +13,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 let candidates = [];
 const activeVcSessions = new Map();
 
-// --- DISCORD APPLICATION CREDENTIALS ---
+// --- DISCORD CREDENTIALS ---
 const BOT_TOKEN = 'MTU2MjczNDQ3NDI0MzA4ODQxNg.Gao1e7.GGpU5j3bEka3Xh_miXkKLYH3sS6sndXDFo-Qlo';
 const CLIENT_ID = '1562734474243088416';
 const CLIENT_SECRET = 'SEiL4-4jv5E36OIhbpNOnf-Bvup8amJ1';
+
+// Exact Redirect URI matching Discord Developer Portal
+const REDIRECT_URI = 'https://girl-owner-event.onrender.com/api/auth/discord/callback';
 
 // --- DISCORD BOT INITIALIZATION ---
 const client = new Client({
@@ -34,29 +35,23 @@ client.on('ready', () => {
   console.log(`🤖 Unfiltered Event Bot logged in as ${client.user.tag}!`);
 });
 
-// Automatically track Chat XP when messages are sent in text channels
 client.on('messageCreate', (message) => {
   if (message.author.bot) return;
-
   const candidate = candidates.find(c => c.id === message.author.id);
   if (candidate) {
-    candidate.chatXp += 10; // Earns 10 XP per message
+    candidate.chatXp += 10;
   }
 });
 
-// Automatically track Voice Channel Hours when users join/leave VCs
 client.on('voiceStateUpdate', (oldState, newState) => {
   const userId = newState.member.id;
   const candidate = candidates.find(c => c.id === userId);
 
   if (!candidate) return;
 
-  // Joined VC
   if (!oldState.channelId && newState.channelId) {
     activeVcSessions.set(userId, Date.now());
-  } 
-  // Left VC
-  else if (oldState.channelId && !newState.channelId) {
+  } else if (oldState.channelId && !newState.channelId) {
     const joinTime = activeVcSessions.get(userId);
     if (joinTime) {
       const hoursSpent = (Date.now() - joinTime) / (1000 * 60 * 60);
@@ -68,48 +63,42 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.login(BOT_TOKEN).catch(err => console.error('Bot login failed:', err));
 
-// --- REAL DISCORD OAUTH2 LOGIN ROUTES ---
+// --- REAL DISCORD OAUTH2 ROUTES ---
 
-// 1. Redirect to Discord OAuth (Forces HTTPS on Render)
+// 1. Redirect to Discord Login
 app.get('/api/auth/discord', (req, res) => {
-  const host = req.get('host');
-  const protocol = host.includes('localhost') ? 'http' : 'https';
-  const redirectUri = encodeURIComponent(`${protocol}://${host}/api/auth/discord/callback`);
-  const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
+  const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`;
   res.redirect(discordAuthUrl);
 });
 
-// 2. Callback from Discord OAuth
+// 2. OAuth Callback
 app.get('/api/auth/discord/callback', async (req, res) => {
   const { code } = req.query;
   if (!code) return res.redirect('/?error=no_code');
 
   try {
-    const host = req.get('host');
-    const protocol = host.includes('localhost') ? 'http' : 'https';
-    const redirectUri = `${protocol}://${host}/api/auth/discord/callback`;
-
-    // Exchange OAuth code for access token
+    // Exchange Code for Access Token
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       body: new URLSearchParams({
         client_id: CLIENT_ID,
         client_secret: CLIENT_SECRET,
-        code,
+        code: code,
         grant_type: 'authorization_code',
-        redirect_uri: redirectUri,
+        redirect_uri: REDIRECT_URI,
         scope: 'identify'
       }),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     });
 
     const tokenData = await tokenResponse.json();
+
     if (!tokenData.access_token) {
-      console.error('Token Exchange Error:', tokenData);
+      console.error('Token Exchange Failed:', tokenData);
       return res.redirect('/?error=token_failed');
     }
 
-    // Fetch user profile from Discord
+    // Fetch User Profile
     const userResponse = await fetch('https://discord.com/api/users/@me', {
       headers: { authorization: `${tokenData.token_type} ${tokenData.access_token}` }
     });
