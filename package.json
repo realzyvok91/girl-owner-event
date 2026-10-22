@@ -1,7 +1,7 @@
 {
   "name": "unfiltered-girl-owner-event",
   "version": "1.0.0",
-  "description": "Unfiltered Girl Owner Event Dashboard with Admin Controls and Built-in Discord Bot",
+  "description": "Unfiltered Girl Owner Event Dashboard",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
