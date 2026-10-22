@@ -21,7 +21,7 @@ const CLIENT_SECRET = 'SEiL4-4jv5E36OIhbpNOnf-Bvup8amJ1';
 
 const REDIRECT_URI = 'https://girl-owner-event.onrender.com/api/auth/discord/callback';
 
-// Helper function for HTTPS POST requests
+// Helper function for HTTPS POST requests with proper User-Agent to bypass Cloudflare 1015
 function httpsPost(url, data) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
@@ -33,7 +33,9 @@ function httpsPost(url, data) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Content-Length': Buffer.byteLength(postData)
+        'Content-Length': Buffer.byteLength(postData),
+        'User-Agent': 'DiscordBot (https://discord.com, 1.0.0) Node.js',
+        'Accept': 'application/json'
       }
     };
 
@@ -52,7 +54,7 @@ function httpsPost(url, data) {
   });
 }
 
-// Helper function for HTTPS GET requests
+// Helper function for HTTPS GET requests with User-Agent
 function httpsGet(url, token) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
@@ -60,7 +62,11 @@ function httpsGet(url, token) {
       hostname: u.hostname,
       path: u.pathname,
       method: 'GET',
-      headers: { 'Authorization': token }
+      headers: {
+        'Authorization': token,
+        'User-Agent': 'DiscordBot (https://discord.com, 1.0.0) Node.js',
+        'Accept': 'application/json'
+      }
     };
 
     const req = https.request(options, (res) => {
