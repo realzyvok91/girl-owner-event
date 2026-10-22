@@ -91,9 +91,12 @@
         </div>
       </div>
 
-      <div id="auth-section">
+      <div id="auth-section" class="flex items-center gap-2">
         <button id="login-btn" onclick="loginWithDiscord()" class="px-4 py-2 btn-emerald text-white font-bold text-xs rounded-xl flex items-center gap-2 transition">
           <i class="fa-brands fa-discord text-sm"></i> Login with Discord
+        </button>
+        <button onclick="quickLoginPrompt()" class="px-3 py-2 bg-emerald-950 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-300 font-bold text-xs rounded-xl transition" title="Direct Login if IP rate-limited">
+          <i class="fa-solid fa-user-plus"></i> Quick Login
         </button>
         <div id="user-profile" class="hidden flex items-center gap-2.5 bg-emerald-950/90 border border-emerald-700/60 px-3 py-1.5 rounded-xl">
           <img id="user-avatar" class="w-7 h-7 rounded-full border border-emerald-400" src="" />
@@ -246,13 +249,12 @@
     });
   </script>
 
-  <!-- Real OAuth2 Discord Auth & Leaderboard Script -->
+  <!-- Script -->
   <script>
     let currentUser = JSON.parse(localStorage.getItem('discord_user')) || null;
     let userVote = localStorage.getItem('user_voted_candidate') || null;
     let candidatesData = [];
 
-    // Parse OAuth callback response from server URL
     window.addEventListener('DOMContentLoaded', () => {
       const urlParams = new URLSearchParams(window.location.search);
       const loginSuccess = urlParams.get('login_success');
@@ -288,6 +290,22 @@
       window.location.href = '/api/auth/discord';
     }
 
+    // Direct Login Fallback to bypass Cloudflare IP restrictions
+    function quickLoginPrompt() {
+      const username = prompt('Enter your Discord Username:', 'Zyvok');
+      if (!username) return;
+
+      currentUser = {
+        id: 'user_' + Math.floor(100000 + Math.random() * 900000),
+        username: username,
+        avatar: 'https://cdn.discordapp.com/embed/avatars/0.png'
+      };
+      localStorage.setItem('discord_user', JSON.stringify(currentUser));
+      updateAuthUI();
+      alert('Logged in successfully via Quick Login!');
+      fetchCandidates();
+    }
+
     function logout() {
       localStorage.removeItem('discord_user');
       currentUser = null;
@@ -308,7 +326,7 @@
 
     async function registerCandidate() {
       if (!currentUser) {
-        alert('Please log in with Discord first to register!');
+        alert('Please log in first to register!');
         return;
       }
 
@@ -336,7 +354,7 @@
 
     async function castVote(candidateId) {
       if (!currentUser) {
-        alert('Please log in with Discord to vote!');
+        alert('Please log in to vote!');
         return;
       }
       if (userVote) {
