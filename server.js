@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const https = require('https');
 const { Client, GatewayIntentBits } = require('discord.js');
 
 const app = express();
@@ -20,68 +19,6 @@ const CLIENT_ID = '1562734474243088416';
 const CLIENT_SECRET = 'SEiL4-4jv5E36OIhbpNOnf-Bvup8amJ1';
 
 const REDIRECT_URI = 'https://girl-owner-event.onrender.com/api/auth/discord/callback';
-
-// Helper function for HTTPS POST requests with proper User-Agent to bypass Cloudflare 1015
-function httpsPost(url, data) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(url);
-    const postData = new URLSearchParams(data).toString();
-
-    const options = {
-      hostname: u.hostname,
-      path: u.pathname,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Content-Length': Buffer.byteLength(postData),
-        'User-Agent': 'DiscordBot (https://discord.com, 1.0.0) Node.js',
-        'Accept': 'application/json'
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => {
-        try { resolve(JSON.parse(body)); }
-        catch (e) { resolve(body); }
-      });
-    });
-
-    req.on('error', reject);
-    req.write(postData);
-    req.end();
-  });
-}
-
-// Helper function for HTTPS GET requests with User-Agent
-function httpsGet(url, token) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(url);
-    const options = {
-      hostname: u.hostname,
-      path: u.pathname,
-      method: 'GET',
-      headers: {
-        'Authorization': token,
-        'User-Agent': 'DiscordBot (https://discord.com, 1.0.0) Node.js',
-        'Accept': 'application/json'
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => {
-        try { resolve(JSON.parse(body)); }
-        catch (e) { resolve(body); }
-      });
-    });
-
-    req.on('error', reject);
-    req.end();
-  });
-}
 
 // --- DISCORD BOT INITIALIZATION ---
 const client = new Client({
@@ -122,35 +59,62 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.login(BOT_TOKEN).catch(err => console.error('Bot login error:', err));
 
-// 1. Redirect user to Discord
+// 1. Redirect user to Discord OAuth
 app.get('/api/auth/discord', (req, res) => {
   const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`;
   res.redirect(discordAuthUrl);
 });
 
-// 2. Callback from Discord
+// 2. Callback from Discord using Native Fetch with browser headers
 app.get('/api/auth/discord/callback', async (req, res) => {
   const { code } = req.query;
   if (!code) return res.redirect('/?error=no_code');
 
   try {
-    console.log('Exchanging auth code with Discord...');
-    const tokenData = await httpsPost('https://discord.com/api/oauth2/token', {
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-      code: code,
-      grant_type: 'authorization_code',
-      redirect_uri: REDIRECT_URI,
-      scope: 'identify'
+    console.log('Exchanging auth code with Discord via native fetch...');
+    
+    const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      body: new URLSearchParams({
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        code: code,
+        grant_type: 'authorization_code',
+        redirect_uri: REDIRECT_URI,
+        scope: 'identify'
+      }),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
     });
 
-    console.log('Discord Token Response:', tokenData);
-
-    if (!tokenData.access_token) {
-      return res.redirect(`/?error=token_failed`);
+    const tokenText = await tokenResponse.text();
+    let tokenData;
+    try {
+      tokenData = JSON.parse(tokenText);
+    } catch (e) {
+      console.error('Failed to parse token response as JSON:', tokenText);
+      return res.redirect('/?error=token_parse_failed');
     }
 
-    const userData = await httpsGet('https://discord.com/api/users/@me', `${tokenData.token_type} ${tokenData.access_token}`);
+    console.log('Discord Token Parsed Response:', tokenData);
+
+    if (!tokenData.access_token) {
+      return res.redirect('/?error=token_failed');
+    }
+
+    const userResponse = await fetch('https://discord.com/api/users/@me', {
+      headers: {
+        'Authorization': `${tokenData.token_type} ${tokenData.access_token}`,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json'
+      }
+    });
+
+    const userData = await userResponse.json();
     console.log('Discord User Data:', userData);
 
     if (!userData.id) {
