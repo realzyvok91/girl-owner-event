@@ -57,7 +57,7 @@
     }
 
     .btn-emerald:hover {
-      background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+      background: linear-gradient(135deg, #10b981 100%, #34d399 100%);
       box-shadow: 0 6px 24px rgba(16, 185, 129, 0.45);
     }
 
@@ -246,24 +246,44 @@
     });
   </script>
 
-  <!-- Script -->
+  <!-- Client-Side Browser Auth Script -->
   <script>
+    const CLIENT_ID = '1562734474243088416';
     let currentUser = JSON.parse(localStorage.getItem('discord_user')) || null;
     let userVote = localStorage.getItem('user_voted_candidate') || null;
     let candidatesData = [];
 
-    window.addEventListener('DOMContentLoaded', () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const loginSuccess = urlParams.get('login_success');
+    window.addEventListener('DOMContentLoaded', async () => {
+      // Check if Discord token returned in URL hash
+      const hash = window.location.hash;
+      if (hash && hash.includes('access_token')) {
+        const params = new URLSearchParams(hash.substring(1));
+        const accessToken = params.get('access_token');
+        const tokenType = params.get('token_type');
 
-      if (loginSuccess) {
-        try {
-          const user = JSON.parse(decodeURIComponent(loginSuccess));
-          localStorage.setItem('discord_user', JSON.stringify(user));
-          currentUser = user;
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } catch (e) {
-          console.error('Login parse error:', e);
+        if (accessToken) {
+          try {
+            const userRes = await fetch('https://discord.com/api/users/@me', {
+              headers: { authorization: `${tokenType} ${accessToken}` }
+            });
+            const userData = await userRes.json();
+            
+            if (userData.id) {
+              const avatarUrl = userData.avatar 
+                ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png`
+                : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+              currentUser = {
+                id: userData.id,
+                username: userData.global_name || userData.username,
+                avatar: avatarUrl
+              };
+              localStorage.setItem('discord_user', JSON.stringify(currentUser));
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
+          } catch (err) {
+            console.error('Failed fetching user profile in browser:', err);
+          }
         }
       }
 
@@ -283,8 +303,11 @@
       }
     }
 
+    // Direct Browser-to-Discord Implicit Flow Login (Bypasses Render IP block completely)
     function loginWithDiscord() {
-      window.location.href = '/api/auth/discord';
+      const redirectUri = window.location.origin + window.location.pathname;
+      const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=identify`;
+      window.location.href = authUrl;
     }
 
     function logout() {
@@ -366,7 +389,7 @@
         return;
       }
 
-      let sorted = [...candidatesData].sort((a, b) => (b.chatXp + (b.vcHours * 100) + (b.votes * 50)) - (a.chatXp + (a.vcHours * 100) + (b.votes * 50)));
+      let sorted = [...candidatesData].sort((a, b) => (b.chatXp + (b.vcHours * 100) + (b.votes * 50)) - (a.chatXp + (a.vcHours * 100) + (a.votes * 50)));
 
       list.innerHTML = '';
       sorted.forEach((c, idx) => {
