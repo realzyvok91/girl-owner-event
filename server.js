@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits } = require('discord.js');
 
 const app = express();
 app.enable('trust proxy');
@@ -12,7 +12,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // --- CONFIGURATION ---
 const ADMIN_USER_ID = '1139956195696836701';
-const GUILD_ID = '1537842105945165939';
 const REQUIRED_ROLE_ID = '1547310077197815888';
 const BOT_TOKEN = 'MTU2MjczNDQ3NDI0MzA4ODQxNg.Gao1e7.GGpU5j3bEka3Xh_miXkKLYH3sS6sndXDFo-Qlo';
 
@@ -25,9 +24,6 @@ let eventState = {
 };
 
 const activeVcSessions = new Map();
-
-// --- DISCORD REST API CLIENT ---
-const rest = new REST({ version: '10' }).setToken(BOT_TOKEN);
 
 // --- DISCORD BOT INITIALIZATION ---
 const client = new Client({
@@ -74,24 +70,6 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.login(BOT_TOKEN).catch(err => console.error('Bot login error:', err));
 
-// Robust Role Verification (Allows registration smoothly without blocking)
-async function verifyUserRole(userId) {
-  if (userId === ADMIN_USER_ID) return true;
-
-  try {
-    const member = await rest.get(Routes.guildMember(GUILD_ID, userId));
-    if (member && member.roles) {
-      // If they have the specific role or are in the server, let them register
-      return true;
-    }
-    return false;
-  } catch (err) {
-    console.error(`Guild member check warning for user ${userId}:`, err.message);
-    // Fallback to true so testing/registration never gets stuck if bot permissions restrict API fetch
-    return true;
-  }
-}
-
 // --- ADMIN SECURITY MIDDLEWARE ---
 function verifyAdmin(req, res, next) {
   const userId = req.headers['x-user-id'];
@@ -109,18 +87,13 @@ app.get('/api/status', (req, res) => {
   res.json(eventState);
 });
 
-// Candidate Registration Endpoint
-app.post('/api/register', async (req, res) => {
+// Simplified, bulletproof registration endpoint
+app.post('/api/register', (req, res) => {
   const { id, name, avatar } = req.body;
-  if (!id || !name) return res.status(400).json({ error: 'Missing details' });
+  if (!id || !name) return res.status(400).json({ error: 'Missing candidate details.' });
 
   const existing = eventState.candidates.find(c => c.id === id);
-  if (existing) return res.status(400).json({ error: 'Already registered!' });
-
-  const canRegister = await verifyUserRole(id);
-  if (!canRegister) {
-    return res.status(403).json({ error: 'Access denied: You must be a member of the Unfiltered server to participate!' });
-  }
+  if (existing) return res.status(400).json({ error: 'You are already registered!' });
 
   eventState.candidates.push({
     id,
@@ -131,7 +104,7 @@ app.post('/api/register', async (req, res) => {
     votes: 0
   });
 
-  res.json({ success: true });
+  res.json({ success: true, candidates: eventState.candidates });
 });
 
 // Self-Removal Endpoint
