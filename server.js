@@ -14,6 +14,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const ADMIN_USER_ID = '1139956195696836701';
 const GUILD_ID = '1537842105945165939';
 const REQUIRED_ROLE_ID = '1547310077197815888';
+const REQUIRED_ROLE_NAME = '・ Hawties ・ ᶻz ・';
 const BOT_TOKEN = 'MTU2MjczNDQ3NDI0MzA4ODQxNg.Gao1e7.GGpU5j3bEka3Xh_miXkKLYH3sS6sndXDFo-Qlo';
 
 // --- EVENT STATE ---
@@ -71,7 +72,7 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.login(BOT_TOKEN).catch(err => console.error('Bot login error:', err));
 
-// --- STRICT ROLE VERIFICATION ---
+// --- ROLE VERIFICATION ---
 async function verifyUserRole(userId) {
   if (userId === ADMIN_USER_ID) return true; // Admin bypass
 
@@ -79,15 +80,14 @@ async function verifyUserRole(userId) {
     const guild = await client.guilds.fetch(GUILD_ID);
     if (!guild) return false;
 
-    // Fetch the member directly from Discord API
     const member = await guild.members.fetch(userId);
     if (member && member.roles.cache.has(REQUIRED_ROLE_ID)) {
       return true;
     }
     return false;
   } catch (err) {
-    console.error(`Role fetch error for user ${userId}:`, err.message);
-    return false; // Strict block if member not found or fetch fails
+    console.error(`Role check error for user ${userId}:`, err.message);
+    return false;
   }
 }
 
@@ -108,7 +108,7 @@ app.get('/api/status', (req, res) => {
   res.json(eventState);
 });
 
-// Strict Role-Enforced Candidate Registration
+// Candidate Registration with Explicit Role Check
 app.post('/api/register', async (req, res) => {
   const { id, name, avatar } = req.body;
   if (!id || !name) return res.status(400).json({ error: 'Missing details.' });
@@ -116,10 +116,9 @@ app.post('/api/register', async (req, res) => {
   const existing = eventState.candidates.find(c => c.id === id);
   if (existing) return res.status(400).json({ error: 'You are already registered!' });
 
-  // Strictly verify role requirement
   const hasRole = await verifyUserRole(id);
   if (!hasRole) {
-    return res.status(403).json({ error: 'Access denied: You must have the "・ Hawties ・ ᶻz ・" role in the Unfiltered server to participate!' });
+    return res.status(403).json({ error: `You don't have '${REQUIRED_ROLE_NAME}' role!` });
   }
 
   eventState.candidates.push({
