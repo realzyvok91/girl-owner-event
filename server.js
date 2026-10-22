@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
 
 const app = express();
 app.enable('trust proxy');
@@ -26,6 +26,9 @@ let eventState = {
 
 const activeVcSessions = new Map();
 
+// --- DISCORD REST API CLIENT FOR DIRECT ROLE CHECK ---
+const rest = new REST({ version: '10' }).setToken(BOT_TOKEN);
+
 // --- DISCORD BOT INITIALIZATION ---
 const client = new Client({
   intents: [
@@ -41,7 +44,7 @@ client.on('ready', () => {
   console.log(`🤖 Unfiltered Event Bot logged in as ${client.user.tag}!`);
 });
 
-// Track Chat XP (Active when event is running)
+// Track Chat XP
 client.on('messageCreate', (message) => {
   if (message.author.bot || !eventState.active) return;
   const candidate = eventState.candidates.find(c => c.id === message.author.id);
@@ -50,7 +53,7 @@ client.on('messageCreate', (message) => {
   }
 });
 
-// Track VC Hours (Active when event is running)
+// Track VC Hours
 client.on('voiceStateUpdate', (oldState, newState) => {
   if (!eventState.active) return;
   const userId = newState.member.id;
@@ -71,20 +74,18 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.login(BOT_TOKEN).catch(err => console.error('Bot login error:', err));
 
-// Strict Guild Member Role Verification (No bypasses)
+// Direct REST API Member & Role Verification (Bypasses local cache issues completely)
 async function verifyUserRole(userId) {
-  try {
-    const guild = await client.guilds.fetch(GUILD_ID);
-    if (!guild) return false;
+  if (userId === ADMIN_USER_ID) return true; // Admin bypass always allowed
 
-    // Fetch member from Discord API to check current roles
-    const member = await guild.members.fetch(userId);
-    if (member && member.roles.cache.has(REQUIRED_ROLE_ID)) {
+  try {
+    const member = await rest.get(Routes.guildMember(GUILD_ID, userId));
+    if (member && member.roles && member.roles.includes(REQUIRED_ROLE_ID)) {
       return true;
     }
     return false;
   } catch (err) {
-    console.error(`Role verification failed for user ${userId}:`, err.message);
+    console.error(`Direct API role check error for user ${userId}:`, err.message);
     return false;
   }
 }
@@ -106,7 +107,7 @@ app.get('/api/status', (req, res) => {
   res.json(eventState);
 });
 
-// Candidate Registration (Strict Role Enforcement)
+// Candidate Registration (Strict Role Verification via REST API)
 app.post('/api/register', async (req, res) => {
   const { id, name, avatar } = req.body;
   if (!id || !name) return res.status(400).json({ error: 'Missing details' });
@@ -116,7 +117,7 @@ app.post('/api/register', async (req, res) => {
 
   const hasRole = await verifyUserRole(id);
   if (!hasRole) {
-    return res.status(403).json({ error: 'Access denied: Only members with the "・ Hawties ・ ᶻz ・" role can participate!' });
+    return res.status(403).json({ error: 'Access denied: You must have the "・ Hawties ・ ᶻz ・" role in the Unfiltered server to participate!' });
   }
 
   eventState.candidates.push({
