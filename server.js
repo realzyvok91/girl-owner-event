@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const https = require('https');
 const { Client, GatewayIntentBits } = require('discord.js');
 
 const app = express();
@@ -10,8 +11,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- RESTRICTED ADMIN CONFIGURATION ---
+// --- CONFIGURATION ---
 const ADMIN_USER_ID = '1139956195696836701';
+const GUILD_ID = 'YOUR_DISCORD_GUILD_ID'; // Optional: replace with your server ID if needed
+const REQUIRED_ROLE_ID = '1547310077197815888';
+const BOT_TOKEN = 'MTU2MjczNDQ3NDI0MzA4ODQxNg.Gao1e7.GGpU5j3bEka3Xh_miXkKLYH3sS6sndXDFo-Qlo';
 
 // --- EVENT STATE ---
 let eventState = {
@@ -23,13 +27,11 @@ let eventState = {
 
 const activeVcSessions = new Map();
 
-// --- DISCORD CREDENTIALS ---
-const BOT_TOKEN = 'MTU2MjczNDQ3NDI0MzA4ODQxNg.Gao1e7.GGpU5j3bEka3Xh_miXkKLYH3sS6sndXDFo-Qlo';
-
 // --- DISCORD BOT INITIALIZATION ---
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates
@@ -40,7 +42,7 @@ client.on('ready', () => {
   console.log(`🤖 Unfiltered Event Bot logged in as ${client.user.tag}!`);
 });
 
-// Track Chat XP (Only active when event is running)
+// Track Chat XP (Active when event is running)
 client.on('messageCreate', (message) => {
   if (message.author.bot || !eventState.active) return;
   const candidate = eventState.candidates.find(c => c.id === message.author.id);
@@ -49,7 +51,7 @@ client.on('messageCreate', (message) => {
   }
 });
 
-// Track VC Hours (Only active when event is running)
+// Track VC Hours (Active when event is running)
 client.on('voiceStateUpdate', (oldState, newState) => {
   if (!eventState.active) return;
   const userId = newState.member.id;
@@ -70,6 +72,27 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.login(BOT_TOKEN).catch(err => console.error('Bot login error:', err));
 
+// Helper to check if a user has the required role using discord.js client cache/fetch
+async function verifyUserRole(userId) {
+  try {
+    // Search across cached guilds where the bot is present
+    for (const [guildId, guild] of client.guilds.cache) {
+      try {
+        const member = await guild.members.fetch(userId);
+        if (member && member.roles.cache.has(REQUIRED_ROLE_ID)) {
+          return true;
+        }
+      } catch (e) {
+        // Member not in this specific guild, continue searching
+      }
+    }
+    return false;
+  } catch (err) {
+    console.error('Role verification error:', err);
+    return false;
+  }
+}
+
 // --- ADMIN SECURITY MIDDLEWARE ---
 function verifyAdmin(req, res, next) {
   const userId = req.headers['x-user-id'];
@@ -80,19 +103,26 @@ function verifyAdmin(req, res, next) {
   }
 }
 
-// --- PUBLIC API ENDPOINTS ---
+// --- API ENDPOINTS ---
 app.get('/ping', (req, res) => res.send('OK'));
 
 app.get('/api/status', (req, res) => {
   res.json(eventState);
 });
 
-app.post('/api/register', (req, res) => {
+// Candidate Registration (Enforces Role Check)
+app.post('/api/register', async (req, res) => {
   const { id, name, avatar } = req.body;
   if (!id || !name) return res.status(400).json({ error: 'Missing details' });
 
   const existing = eventState.candidates.find(c => c.id === id);
   if (existing) return res.status(400).json({ error: 'Already registered!' });
+
+  // Verify role requirement
+  const hasRole = await verifyUserRole(id);
+  if (!hasRole) {
+    return res.status(403).json({ error: 'Access denied: Only members with the "・ Hawties ・ ᶻz ・" role can participate!' });
+  }
 
   eventState.candidates.push({
     id,
@@ -106,6 +136,18 @@ app.post('/api/register', (req, res) => {
   res.json({ success: true });
 });
 
+// Self-Removal Endpoint
+app.post('/api/leave', (req, res) => {
+  const { id } = req.body;
+  const index = eventState.candidates.findIndex(c => c.id === id);
+  if (index === -1) return res.status(404).json({ error: 'Candidate not found.' });
+
+  eventState.candidates.splice(index, 1);
+  activeVcSessions.delete(id);
+  res.json({ success: true });
+});
+
+// Vote Endpoint
 app.post('/api/vote', (req, res) => {
   if (!eventState.active) return res.status(400).json({ error: 'Event is not active!' });
 
@@ -119,7 +161,7 @@ app.post('/api/vote', (req, res) => {
   }
 });
 
-// --- PROTECTED ADMIN ENDPOINTS ---
+// --- ADMIN ENDPOINTS ---
 app.post('/api/admin/start', verifyAdmin, (req, res) => {
   eventState.active = true;
   eventState.startTime = Date.now();
@@ -136,6 +178,17 @@ app.post('/api/admin/reset', verifyAdmin, (req, res) => {
   eventState.startTime = null;
   eventState.candidates = [];
   activeVcSessions.clear();
+  res.json({ success: true, eventState });
+});
+
+// Admin Remove Specific Participant
+app.post('/api/admin/remove-candidate', verifyAdmin, (req, res) => {
+  const { candidateId } = req.body;
+  const index = eventState.candidates.findIndex(c => c.id === candidateId);
+  if (index === -1) return res.status(404).json({ error: 'Candidate not found.' });
+
+  eventState.candidates.splice(index, 1);
+  activeVcSessions.delete(candidateId);
   res.json({ success: true, eventState });
 });
 
