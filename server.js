@@ -71,23 +71,21 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.login(BOT_TOKEN).catch(err => console.error('Bot login error:', err));
 
-// Robust Guild Member Role Verification with Safe Fallback
+// Strict Guild Member Role Verification (No bypasses)
 async function verifyUserRole(userId) {
-  if (userId === ADMIN_USER_ID) return true;
-  
   try {
     const guild = await client.guilds.fetch(GUILD_ID);
-    if (!guild) return true; // Fallback if guild fetch fails
+    if (!guild) return false;
 
+    // Fetch member from Discord API to check current roles
     const member = await guild.members.fetch(userId);
     if (member && member.roles.cache.has(REQUIRED_ROLE_ID)) {
       return true;
     }
     return false;
   } catch (err) {
-    console.error(`Role verification warning for user ${userId}:`, err.message);
-    // Fallback to true if bot fetch encounters gateway intent/cache limits so registration doesn't break
-    return true; 
+    console.error(`Role verification failed for user ${userId}:`, err.message);
+    return false;
   }
 }
 
@@ -108,7 +106,7 @@ app.get('/api/status', (req, res) => {
   res.json(eventState);
 });
 
-// Candidate Registration
+// Candidate Registration (Strict Role Enforcement)
 app.post('/api/register', async (req, res) => {
   const { id, name, avatar } = req.body;
   if (!id || !name) return res.status(400).json({ error: 'Missing details' });
@@ -118,7 +116,7 @@ app.post('/api/register', async (req, res) => {
 
   const hasRole = await verifyUserRole(id);
   if (!hasRole) {
-    return res.status(403).json({ error: 'Access denied: You must have the "・ Hawties ・ ᶻz ・" role in the Unfiltered server to participate!' });
+    return res.status(403).json({ error: 'Access denied: Only members with the "・ Hawties ・ ᶻz ・" role can participate!' });
   }
 
   eventState.candidates.push({
