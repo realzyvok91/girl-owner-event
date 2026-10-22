@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Discord Girl Owner Event Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    body { background-color: #0d0e12; color: #f3f4f6; font-family: system-ui, -apple-system, sans-serif; }
+    .glass { background: rgba(22, 24, 34, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    .accent-gradient { background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); }
+    .glow { box-shadow: 0 0 25px rgba(236, 72, 153, 0.3); }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+  <!-- Header -->
+  <header class="glass sticky top-0 z-50 border-b border-gray-800 px-6 py-4 flex justify-between items-center">
+    <div class="flex items-center space-x-3">
+      <div class="w-10 h-10 rounded-xl accent-gradient flex items-center justify-center font-bold text-xl shadow-lg">👑</div>
+      <div>
+        <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-500">
+          Girl Owner Event
+        </h1>
+        <p class="text-xs text-gray-400">2-Day Activity & Community Sprint</p>
+      </div>
+    </div>
+
+    <div id="auth-section">
+      <button id="login-btn" onclick="loginDemo()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-lg flex items-center gap-2 transition">
+        <i class="fa-brands fa-discord"></i> Login with Discord
+      </button>
+      <div id="user-profile" class="hidden flex items-center gap-2 bg-gray-900 border border-gray-700 px-3 py-1.5 rounded-xl">
+        <img id="user-avatar" class="w-7 h-7 rounded-full border border-pink-500" src="" />
+        <span id="user-name" class="text-xs font-semibold text-gray-200"></span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl w-full mx-auto p-4 md:p-6 space-y-8">
+
+    <!-- Hero Banner -->
+    <div class="glass rounded-2xl p-6 glow flex flex-col md:flex-row justify-between items-center gap-6 border-pink-500/20">
+      <div class="space-y-2 text-center md:text-left">
+        <span class="px-3 py-1 bg-pink-500/10 border border-pink-500/30 text-pink-400 text-xs font-semibold rounded-full uppercase">
+          Live 48-Hour Event
+        </span>
+        <h2 class="text-3xl font-extrabold text-white">Choose Our Next Girl Owner!</h2>
+        <p class="text-gray-400 text-sm">Register below to join the leaderboard. Votes and activity boost your position!</p>
+      </div>
+
+      <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-center min-w-[240px]">
+        <div class="text-xs text-gray-400 uppercase tracking-widest block mb-1">Sprint Timer</div>
+        <div class="text-2xl font-mono font-bold text-pink-400">48:00:00</div>
+        <button onclick="registerCandidate()" class="w-full mt-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-90 text-white font-semibold text-xs rounded-lg shadow-md transition">
+          ✨ Register as Candidate
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      
+      <!-- Leaderboard -->
+      <div class="lg:col-span-2 space-y-4">
+        <h3 class="text-xl font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-trophy text-yellow-400"></i> Event Leaderboard
+        </h3>
+        <div class="glass rounded-2xl overflow-hidden">
+          <div class="p-4 border-b border-gray-800 bg-gray-900/50 flex justify-between text-xs text-gray-400 font-semibold uppercase">
+            <span>Candidate</span>
+            <div class="flex gap-6">
+              <span>Chat XP</span>
+              <span>VC Hrs</span>
+              <span>Votes</span>
+              <span>Total</span>
+            </div>
+          </div>
+          <div id="leaderboard-list" class="divide-y divide-gray-800/50">
+            <div class="p-8 text-center text-gray-500 text-sm">
+              No candidates registered yet. Click "Register as Candidate" to be the first!
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Voting Box -->
+      <div class="space-y-4">
+        <h3 class="text-xl font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-check-to-slot text-pink-400"></i> Vote Candidate
+        </h3>
+        <div class="glass rounded-2xl p-5 space-y-3 border-gray-800">
+          <p class="text-xs text-gray-400">1 Vote per member!</p>
+          <div id="voting-list" class="space-y-2">
+            <div class="text-xs text-gray-500 text-center py-4">Waiting for candidates...</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    let currentUser = JSON.parse(localStorage.getItem('discord_user')) || null;
+    let userVote = localStorage.getItem('user_voted_candidate') || null;
+    let candidatesData = [];
+
+    function updateAuthUI() {
+      if (currentUser) {
+        document.getElementById('login-btn').classList.add('hidden');
+        document.getElementById('user-profile').classList.remove('hidden');
+        document.getElementById('user-name').innerText = currentUser.username;
+        document.getElementById('user-avatar').src = currentUser.avatar;
+      }
+    }
+
+    function loginDemo() {
+      const id = 'user_' + Math.floor(1000 + Math.random() * 9000);
+      currentUser = {
+        id,
+        username: 'Member#' + id.slice(-4),
+        avatar: 'https://cdn.discordapp.com/embed/avatars/0.png'
+      };
+      localStorage.setItem('discord_user', JSON.stringify(currentUser));
+      updateAuthUI();
+    }
+
+    async function fetchCandidates() {
+      try {
+        const res = await fetch('/api/candidates');
+        candidatesData = await res.json();
+        renderLeaderboard();
+        renderVoting();
+      } catch (e) {
+        console.error('Error fetching candidates:', e);
+      }
+    }
+
+    async function registerCandidate() {
+      if (!currentUser) {
+        alert('Please login first to register!');
+        return;
+      }
+
+      const name = prompt('Enter candidate display name:', currentUser.username);
+      if (!name) return;
+
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: currentUser.id,
+          name: name,
+          avatar: currentUser.avatar
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        alert('Registered successfully!');
+        fetchCandidates();
+      } else {
+        alert(data.error || 'Registration failed');
+      }
+    }
+
+    async function castVote(candidateId) {
+      if (!currentUser) {
+        alert('Please login to vote!');
+        return;
+      }
+      if (userVote) {
+        alert('You already used your 1 vote!');
+        return;
+      }
+
+      const res = await fetch('/api/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidateId })
+      });
+
+      if (res.ok) {
+        userVote = candidateId;
+        localStorage.setItem('user_voted_candidate', candidateId);
+        fetchCandidates();
+      }
+    }
+
+    function renderLeaderboard() {
+      const list = document.getElementById('leaderboard-list');
+      if (candidatesData.length === 0) {
+        list.innerHTML = `<div class="p-8 text-center text-gray-500 text-sm">No candidates registered yet. Click "Register as Candidate" to be the first!</div>`;
+        return;
+      }
+
+      let sorted = [...candidatesData].sort((a, b) => (b.chatXp + (b.vcHours * 100) + (b.votes * 50)) - (a.chatXp + (a.vcHours * 100) + (a.votes * 50)));
+
+      list.innerHTML = '';
+      sorted.forEach((c, idx) => {
+        let total = c.chatXp + (c.vcHours * 100) + (c.votes * 50);
+        list.innerHTML += `
+          <div class="p-4 flex justify-between items-center hover:bg-gray-800/30">
+            <div class="flex items-center gap-3">
+              <span class="font-bold text-sm w-5 text-gray-400">#${idx + 1}</span>
+              <img src="${c.avatar}" class="w-8 h-8 rounded-full" />
+              <span class="font-bold text-sm text-white">${c.name}</span>
+            </div>
+            <div class="flex gap-6 text-xs font-mono">
+              <span class="text-gray-300">${c.chatXp}</span>
+              <span class="text-gray-300">${c.vcHours}h</span>
+              <span class="text-pink-400 font-bold">${c.votes}</span>
+              <span class="text-purple-400 font-bold">${total}</span>
+            </div>
+          </div>`;
+      });
+    }
+
+    function renderVoting() {
+      const container = document.getElementById('voting-list');
+      if (candidatesData.length === 0) {
+        container.innerHTML = `<div class="text-xs text-gray-500 text-center py-4">Waiting for candidates...</div>`;
+        return;
+      }
+
+      container.innerHTML = '';
+      candidatesData.forEach(c => {
+        const hasVotedThis = userVote === c.id;
+        container.innerHTML += `
+          <div class="bg-gray-900 border border-gray-800 p-2.5 rounded-xl flex justify-between items-center">
+            <div class="flex items-center gap-2">
+              <img src="${c.avatar}" class="w-7 h-7 rounded-full" />
+              <span class="text-xs font-semibold text-white">${c.name}</span>
+            </div>
+            <button onclick="castVote('${c.id}')" ${userVote ? 'disabled' : ''} class="px-3 py-1 text-xs font-semibold rounded-lg ${hasVotedThis ? 'bg-green-600 text-white' : userVote ? 'bg-gray-800 text-gray-500' : 'bg-pink-600 hover:bg-pink-500 text-white'}">
+              ${hasVotedThis ? 'Voted ✓' : 'Vote'}
+            </button>
+          </div>`;
+      });
+    }
+
+    updateAuthUI();
+    fetchCandidates();
+    setInterval(fetchCandidates, 3000);
+  </script>
+</body>
+</html>
