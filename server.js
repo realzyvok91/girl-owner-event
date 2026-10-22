@@ -4,6 +4,10 @@ const path = require('path');
 const { Client, GatewayIntentBits } = require('discord.js');
 
 const app = express();
+
+// Enable trust proxy so Express correctly detects HTTPS on hostings like Render
+app.enable('trust proxy');
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -11,12 +15,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 let candidates = [];
 const activeVcSessions = new Map();
 
-// Credentials
+// --- DISCORD APPLICATION CREDENTIALS ---
 const BOT_TOKEN = 'MTU2MjczNDQ3NDI0MzA4ODQxNg.Gao1e7.GGpU5j3bEka3Xh_miXkKLYH3sS6sndXDFo-Qlo';
 const CLIENT_ID = '1562734474243088416';
 const CLIENT_SECRET = 'SEiL4-4jv5E36OIhbpNOnf-Bvup8amJ1';
 
-// Discord Bot
+// --- DISCORD BOT INITIALIZATION ---
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -30,20 +34,29 @@ client.on('ready', () => {
   console.log(`🤖 Unfiltered Event Bot logged in as ${client.user.tag}!`);
 });
 
+// Automatically track Chat XP when messages are sent in text channels
 client.on('messageCreate', (message) => {
   if (message.author.bot) return;
+
   const candidate = candidates.find(c => c.id === message.author.id);
-  if (candidate) candidate.chatXp += 10;
+  if (candidate) {
+    candidate.chatXp += 10; // Earns 10 XP per message
+  }
 });
 
+// Automatically track Voice Channel Hours when users join/leave VCs
 client.on('voiceStateUpdate', (oldState, newState) => {
   const userId = newState.member.id;
   const candidate = candidates.find(c => c.id === userId);
+
   if (!candidate) return;
 
+  // Joined VC
   if (!oldState.channelId && newState.channelId) {
     activeVcSessions.set(userId, Date.now());
-  } else if (oldState.channelId && !newState.channelId) {
+  } 
+  // Left VC
+  else if (oldState.channelId && !newState.channelId) {
     const joinTime = activeVcSessions.get(userId);
     if (joinTime) {
       const hoursSpent = (Date.now() - joinTime) / (1000 * 60 * 60);
@@ -53,26 +66,30 @@ client.on('voiceStateUpdate', (oldState, newState) => {
   }
 });
 
-client.login(BOT_TOKEN).catch(err => console.error('Bot error:', err));
+client.login(BOT_TOKEN).catch(err => console.error('Bot login failed:', err));
 
 // --- REAL DISCORD OAUTH2 LOGIN ROUTES ---
 
-// 1. Redirect to Discord OAuth
+// 1. Redirect to Discord OAuth (Forces HTTPS on Render)
 app.get('/api/auth/discord', (req, res) => {
-  const redirectUri = encodeURIComponent(`${req.protocol}://${req.get('host')}/api/auth/discord/callback`);
+  const host = req.get('host');
+  const protocol = host.includes('localhost') ? 'http' : 'https';
+  const redirectUri = encodeURIComponent(`${protocol}://${host}/api/auth/discord/callback`);
   const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
   res.redirect(discordAuthUrl);
 });
 
-// 2. Callback from Discord
+// 2. Callback from Discord OAuth
 app.get('/api/auth/discord/callback', async (req, res) => {
   const { code } = req.query;
   if (!code) return res.redirect('/?error=no_code');
 
   try {
-    const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/discord/callback`;
+    const host = req.get('host');
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    const redirectUri = `${protocol}://${host}/api/auth/discord/callback`;
 
-    // Exchange Code for Access Token
+    // Exchange OAuth code for access token
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       body: new URLSearchParams({
@@ -87,9 +104,12 @@ app.get('/api/auth/discord/callback', async (req, res) => {
     });
 
     const tokenData = await tokenResponse.json();
-    if (!tokenData.access_token) return res.redirect('/?error=token_failed');
+    if (!tokenData.access_token) {
+      console.error('Token Exchange Error:', tokenData);
+      return res.redirect('/?error=token_failed');
+    }
 
-    // Fetch User Profile
+    // Fetch user profile from Discord
     const userResponse = await fetch('https://discord.com/api/users/@me', {
       headers: { authorization: `${tokenData.token_type} ${tokenData.access_token}` }
     });
@@ -99,7 +119,6 @@ app.get('/api/auth/discord/callback', async (req, res) => {
       ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png`
       : 'https://cdn.discordapp.com/embed/avatars/0.png';
 
-    // Pass user profile back to frontend via query string
     const userQuery = encodeURIComponent(JSON.stringify({
       id: userData.id,
       username: userData.global_name || userData.username,
@@ -116,14 +135,16 @@ app.get('/api/auth/discord/callback', async (req, res) => {
 // --- API ENDPOINTS ---
 app.get('/ping', (req, res) => res.send('OK'));
 
-app.get('/api/candidates', (req, res) => res.json(candidates));
+app.get('/api/candidates', (req, res) => {
+  res.json(candidates);
+});
 
 app.post('/api/register', (req, res) => {
   const { id, name, avatar } = req.body;
   if (!id || !name) return res.status(400).json({ error: 'Missing details' });
 
   const existing = candidates.find(c => c.id === id);
-  if (existing) return res.status(400).json({ error: 'Already registered!' });
+  if (existing) return res.status(400).json({ error: 'Already registered on leaderboard!' });
 
   candidates.push({
     id,
@@ -140,6 +161,7 @@ app.post('/api/register', (req, res) => {
 app.post('/api/vote', (req, res) => {
   const { candidateId } = req.body;
   const candidate = candidates.find(c => c.id === candidateId);
+
   if (candidate) {
     candidate.votes += 1;
     res.json({ success: true });
