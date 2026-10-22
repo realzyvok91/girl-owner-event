@@ -75,10 +75,7 @@ client.login(BOT_TOKEN).catch(err => console.error('Bot login error:', err));
 async function verifyUserRole(userId) {
   try {
     const guild = await client.guilds.fetch(GUILD_ID);
-    if (!guild) {
-      console.error('Guild not found by Bot!');
-      return false;
-    }
+    if (!guild) return false;
 
     const member = await guild.members.fetch(userId);
     if (member && member.roles.cache.has(REQUIRED_ROLE_ID)) {
@@ -108,7 +105,7 @@ app.get('/api/status', (req, res) => {
   res.json(eventState);
 });
 
-// Candidate Registration (Bypasses bot fetch restriction for Admin, enforces check for others)
+// Candidate Registration (Bypasses fetch restriction for Admin, enforces check for others)
 app.post('/api/register', async (req, res) => {
   const { id, name, avatar } = req.body;
   if (!id || !name) return res.status(400).json({ error: 'Missing details' });
@@ -116,7 +113,6 @@ app.post('/api/register', async (req, res) => {
   const existing = eventState.candidates.find(c => c.id === id);
   if (existing) return res.status(400).json({ error: 'Already registered!' });
 
-  // Admin bypasses fetch check to ensure smooth testing & registration
   if (id !== ADMIN_USER_ID) {
     const hasRole = await verifyUserRole(id);
     if (!hasRole) {
