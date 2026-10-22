@@ -108,7 +108,7 @@ app.get('/api/status', (req, res) => {
   res.json(eventState);
 });
 
-// Candidate Registration (Strict Role Check with Admin Bypass)
+// Candidate Registration (Bypasses bot fetch restriction for Admin, enforces check for others)
 app.post('/api/register', async (req, res) => {
   const { id, name, avatar } = req.body;
   if (!id || !name) return res.status(400).json({ error: 'Missing details' });
@@ -116,6 +116,7 @@ app.post('/api/register', async (req, res) => {
   const existing = eventState.candidates.find(c => c.id === id);
   if (existing) return res.status(400).json({ error: 'Already registered!' });
 
+  // Admin bypasses fetch check to ensure smooth testing & registration
   if (id !== ADMIN_USER_ID) {
     const hasRole = await verifyUserRole(id);
     if (!hasRole) {
