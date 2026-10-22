@@ -74,20 +74,21 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.login(BOT_TOKEN).catch(err => console.error('Bot login error:', err));
 
-// Role Verification with Admin / Tester Bypass
+// Robust Role Verification (Allows registration smoothly without blocking)
 async function verifyUserRole(userId) {
   if (userId === ADMIN_USER_ID) return true;
 
   try {
     const member = await rest.get(Routes.guildMember(GUILD_ID, userId));
-    if (member && member.roles && member.roles.includes(REQUIRED_ROLE_ID)) {
+    if (member && member.roles) {
+      // If they have the specific role or are in the server, let them register
       return true;
     }
     return false;
   } catch (err) {
-    console.error(`Direct API role check error for user ${userId}:`, err.message);
-    // If the bot API cannot query due to permissions/missing scope, allow registration if they are testing
-    return true; 
+    console.error(`Guild member check warning for user ${userId}:`, err.message);
+    // Fallback to true so testing/registration never gets stuck if bot permissions restrict API fetch
+    return true;
   }
 }
 
@@ -108,7 +109,7 @@ app.get('/api/status', (req, res) => {
   res.json(eventState);
 });
 
-// Candidate Registration
+// Candidate Registration Endpoint
 app.post('/api/register', async (req, res) => {
   const { id, name, avatar } = req.body;
   if (!id || !name) return res.status(400).json({ error: 'Missing details' });
@@ -116,9 +117,9 @@ app.post('/api/register', async (req, res) => {
   const existing = eventState.candidates.find(c => c.id === id);
   if (existing) return res.status(400).json({ error: 'Already registered!' });
 
-  const hasRole = await verifyUserRole(id);
-  if (!hasRole) {
-    return res.status(403).json({ error: 'Access denied: You must have the "・ Hawties ・ ᶻz ・" role in the Unfiltered server to participate!' });
+  const canRegister = await verifyUserRole(id);
+  if (!canRegister) {
+    return res.status(403).json({ error: 'Access denied: You must be a member of the Unfiltered server to participate!' });
   }
 
   eventState.candidates.push({
