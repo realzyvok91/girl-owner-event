@@ -143,7 +143,7 @@
             Choose Our Next <span class="gradient-text">Girl Owner</span>
           </h2>
           <p class="text-gray-300 text-sm max-w-md leading-relaxed">
-            Represent <strong class="text-emerald-400">Unfiltered</strong>! Active chat messages and voice channel time are tracked live by our bot, combined with community votes.
+            Represent <strong class="text-emerald-400">Unfiltered</strong>! Only members with <strong class="text-pink-400">・ Hawties ・ ᶻz ・</strong> role can register. Tracked live by our bot!
           </p>
         </div>
 
@@ -152,6 +152,9 @@
           <div id="timer" class="text-3xl font-mono font-extrabold text-emerald-300 tracking-wider">48:00:00</div>
           <button onclick="registerCandidate()" class="w-full mt-4 py-2.5 btn-emerald text-white font-extrabold text-xs rounded-xl transition">
             ✨ Register as Candidate
+          </button>
+          <button id="leave-btn" onclick="leaveEvent()" class="hidden w-full mt-2 py-2 bg-red-950/80 hover:bg-red-900 border border-red-700/60 text-red-300 font-bold text-xs rounded-xl transition">
+            🚪 Leave Participants List
           </button>
         </div>
       </div>
@@ -167,11 +170,12 @@
           <div class="glass-card rounded-2xl overflow-hidden shadow-lg">
             <div class="p-4 border-b border-emerald-900/60 bg-emerald-950/80 flex justify-between text-xs text-emerald-300 font-bold uppercase tracking-wider">
               <span>Candidate</span>
-              <div class="flex gap-6">
+              <div class="flex gap-6 items-center">
                 <span>Chat XP</span>
                 <span>VC Hours</span>
                 <span>Votes</span>
                 <span>Total</span>
+                <span id="admin-header-action" class="hidden">Action</span>
               </div>
             </div>
             <div id="leaderboard-list" class="divide-y divide-emerald-900/40">
@@ -323,16 +327,27 @@
         document.getElementById('user-name').innerText = currentUser.username;
         document.getElementById('user-avatar').src = currentUser.avatar;
 
-        // ONLY show Admin Panel button if logged in user matches exact ID: 1139956195696836701
         if (currentUser.id === ADMIN_USER_ID) {
           document.getElementById('admin-panel-btn').classList.remove('hidden');
         } else {
           document.getElementById('admin-panel-btn').classList.add('hidden');
         }
+
+        checkIfParticipant();
       } else {
         document.getElementById('login-btn').classList.remove('hidden');
         document.getElementById('user-profile').classList.add('hidden');
         document.getElementById('admin-panel-btn').classList.add('hidden');
+        document.getElementById('leave-btn').classList.add('hidden');
+      }
+    }
+
+    function checkIfParticipant() {
+      const isCandidate = eventState.candidates.some(c => c.id === currentUser?.id);
+      if (isCandidate) {
+        document.getElementById('leave-btn').classList.remove('hidden');
+      } else {
+        document.getElementById('leave-btn').classList.add('hidden');
       }
     }
 
@@ -359,6 +374,7 @@
         const res = await fetch('/api/status');
         eventState = await res.json();
         renderDashboard();
+        checkIfParticipant();
       } catch (e) {
         console.log('Syncing status...', e);
       }
@@ -419,11 +435,29 @@
       });
 
       if (res.ok) {
-        alert('Registered successfully!');
+        alert('Registered successfully! Role verified.');
         fetchStatus();
       } else {
         const data = await res.json();
         alert(data.error || 'Registration failed.');
+      }
+    }
+
+    async function leaveEvent() {
+      if (!currentUser) return;
+      if (confirm('Are you sure you want to remove yourself from the participants list?')) {
+        const res = await fetch('/api/leave', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: currentUser.id })
+        });
+
+        if (res.ok) {
+          alert('You have left the participants list.');
+          fetchStatus();
+        } else {
+          alert('Failed to leave.');
+        }
       }
     }
 
@@ -457,7 +491,7 @@
       }
     }
 
-    // --- PROTECTED ADMIN ACTION FUNCTIONS ---
+    // --- ADMIN ACTIONS ---
     async function startEvent() {
       if (!currentUser) return;
       const res = await fetch('/api/admin/start', {
@@ -490,9 +524,37 @@
       }
     }
 
+    async function adminRemoveCandidate(candidateId) {
+      if (!currentUser) return;
+      if (confirm('Admin: Are you sure you want to remove this participant?')) {
+        const res = await fetch('/api/admin/remove-candidate', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-user-id': currentUser.id 
+          },
+          body: JSON.stringify({ candidateId })
+        });
+        if (res.ok) {
+          alert('Participant removed by admin.');
+          fetchStatus();
+        } else {
+          alert('Failed to remove candidate.');
+        }
+      }
+    }
+
     function renderLeaderboard() {
       const list = document.getElementById('leaderboard-list');
       const candidates = eventState.candidates || [];
+      const isAdmin = currentUser && currentUser.id === ADMIN_USER_ID;
+
+      const headerAction = document.getElementById('admin-header-action');
+      if (isAdmin && candidates.length > 0) {
+        headerAction.classList.remove('hidden');
+      } else {
+        headerAction.classList.add('hidden');
+      }
 
       if (candidates.length === 0) {
         list.innerHTML = `<div class="p-8 text-center text-gray-400 text-sm font-medium">No candidates registered yet. Click "Register as Candidate" to join!</div>`;
@@ -504,6 +566,8 @@
       list.innerHTML = '';
       sorted.forEach((c, idx) => {
         let total = c.chatXp + (c.vcHours * 100) + (c.votes * 50);
+        let adminActionHtml = isAdmin ? `<button onclick="adminRemoveCandidate('${c.id}')" class="px-2 py-1 bg-red-900/60 hover:bg-red-800 text-red-200 text-[10px] font-bold rounded">Remove</button>` : '';
+
         list.innerHTML += `
           <div class="p-4 flex justify-between items-center hover:bg-emerald-950/50 transition">
             <div class="flex items-center gap-3">
@@ -511,11 +575,12 @@
               <img src="${c.avatar}" class="w-8 h-8 rounded-full border border-emerald-600" />
               <span class="font-bold text-sm text-white">${c.name}</span>
             </div>
-            <div class="flex gap-6 text-xs font-mono font-bold">
+            <div class="flex gap-6 items-center text-xs font-mono font-bold">
               <span class="text-gray-300">${c.chatXp}</span>
               <span class="text-gray-300">${c.vcHours}h</span>
               <span class="text-emerald-400">${c.votes}</span>
               <span class="text-emerald-300">${total}</span>
+              ${isAdmin ? `<div class="w-16 text-right">${adminActionHtml}</div>` : ''}
             </div>
           </div>`;
       });
