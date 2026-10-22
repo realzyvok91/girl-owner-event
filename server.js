@@ -21,21 +21,27 @@ const CLIENT_SECRET = 'SEiL4-4jv5E36OIhbpNOnf-Bvup8amJ1';
 
 const REDIRECT_URI = 'https://girl-owner-event.onrender.com/api/auth/discord/callback';
 
-// Robust HTTPS POST helper with custom User-Agent
-function httpsPost(url, data) {
+// Enhanced HTTPS POST with full browser headers to avoid Cloudflare blocks
+function exchangeCodeForToken(code) {
   return new Promise((resolve, reject) => {
-    const u = new URL(url);
-    const postData = new URLSearchParams(data).toString();
+    const postData = new URLSearchParams({
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      grant_type: 'authorization_code',
+      code: code,
+      redirect_uri: REDIRECT_URI
+    }).toString();
 
     const options = {
-      hostname: u.hostname,
-      path: u.pathname,
+      hostname: 'discord.com',
+      path: '/api/oauth2/token',
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Content-Length': Buffer.byteLength(postData),
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Accept': 'application/json'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9'
       }
     };
 
@@ -43,8 +49,11 @@ function httpsPost(url, data) {
       let body = '';
       res.on('data', chunk => body += chunk);
       res.on('end', () => {
-        try { resolve(JSON.parse(body)); }
-        catch (e) { resolve(body); }
+        try {
+          resolve(JSON.parse(body));
+        } catch (e) {
+          resolve({ error: 'parse_failed', raw: body });
+        }
       });
     });
 
@@ -54,16 +63,15 @@ function httpsPost(url, data) {
   });
 }
 
-function httpsGet(url, token) {
+function fetchDiscordUser(tokenType, accessToken) {
   return new Promise((resolve, reject) => {
-    const u = new URL(url);
     const options = {
-      hostname: u.hostname,
-      path: u.pathname,
+      hostname: 'discord.com',
+      path: '/api/users/@me',
       method: 'GET',
       headers: {
-        'Authorization': token,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Authorization': `${tokenType} ${accessToken}`,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json'
       }
     };
@@ -72,8 +80,11 @@ function httpsGet(url, token) {
       let body = '';
       res.on('data', chunk => body += chunk);
       res.on('end', () => {
-        try { resolve(JSON.parse(body)); }
-        catch (e) { resolve(body); }
+        try {
+          resolve(JSON.parse(body));
+        } catch (e) {
+          resolve({ error: 'parse_failed', raw: body });
+        }
       });
     });
 
@@ -133,29 +144,23 @@ app.get('/api/auth/discord/callback', async (req, res) => {
   if (!code) return res.redirect('/?error=no_code');
 
   try {
-    const tokenData = await httpsPost('https://discord.com/api/oauth2/token', {
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-      code: code,
-      grant_type: 'authorization_code',
-      redirect_uri: REDIRECT_URI,
-      scope: 'identify'
-    });
+    console.log('Exchanging auth code with Discord API...');
+    const tokenData = await exchangeCodeForToken(code);
+    console.log('Token API Response Result:', tokenData);
 
     if (!tokenData.access_token) {
-      console.error('Token Exchange Failed:', tokenData);
       return res.redirect(`/?error=token_failed`);
     }
 
-    const userData = await httpsGet('https://discord.com/api/users/@me', `${tokenData.token_type} ${tokenData.access_token}`);
+    const userData = await fetchDiscordUser(tokenData.token_type || 'Bearer', tokenData.access_token);
+    console.log('User Profile Result:', userData);
 
     if (!userData.id) {
-      console.error('User Fetch Failed:', userData);
       return res.redirect('/?error=user_fetch_failed');
     }
 
     const avatarUrl = userData.avatar 
-      ? `https://cdn.cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png`
+      ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png`
       : 'https://cdn.discordapp.com/embed/avatars/0.png';
 
     const userObj = {
