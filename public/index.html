@@ -98,6 +98,7 @@
         <div id="user-profile" class="hidden flex items-center gap-2.5 bg-emerald-950/90 border border-emerald-700/60 px-3 py-1.5 rounded-xl">
           <img id="user-avatar" class="w-7 h-7 rounded-full border border-emerald-400" src="" />
           <span id="user-name" class="text-xs font-semibold text-emerald-100"></span>
+          <button onclick="logout()" class="ml-2 text-xs text-red-400 hover:text-red-300 font-bold"><i class="fa-solid fa-right-from-bracket"></i></button>
         </div>
       </div>
     </header>
@@ -115,7 +116,7 @@
             Choose Our Next <span class="gradient-text">Girl Owner</span>
           </h2>
           <p class="text-gray-300 text-sm max-w-md leading-relaxed">
-            Represent <strong class="text-emerald-400">Unfiltered</strong>! Active chat, voice channel time, and community votes decide our next Girl Owner.
+            Represent <strong class="text-emerald-400">Unfiltered</strong>! Active chat, voice channel time tracked by our bot, and community votes decide our next Girl Owner.
           </p>
         </div>
 
@@ -161,7 +162,7 @@
           </h3>
           <div class="glass-card rounded-2xl p-5 space-y-3 shadow-lg">
             <p class="text-xs text-gray-300 font-medium">
-              Every Unfiltered member gets <strong class="text-emerald-400">1 vote</strong>!
+              Every Unfiltered member gets <strong class="text-emerald-400">1 vote</strong>! (Login required)
             </p>
             <div id="voting-list" class="space-y-2">
               <div class="text-xs text-gray-500 text-center py-4">Waiting for candidates...</div>
@@ -193,7 +194,6 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
 
-    // Subtle Ambient Light
     const ambientLight = new THREE.AmbientLight(0x0a2e1d, 1.5);
     scene.add(ambientLight);
 
@@ -201,7 +201,6 @@
     emeraldLight.position.set(4, 4, 4);
     scene.add(emeraldLight);
 
-    // Floating Particles
     const geometry = new THREE.TetrahedronGeometry(0.3, 0);
     const gems = [];
 
@@ -245,7 +244,7 @@
     });
   </script>
 
-  <!-- App Data Script -->
+  <!-- App Data & Auth Script -->
   <script>
     let currentUser = JSON.parse(localStorage.getItem('discord_user')) || null;
     let userVote = localStorage.getItem('user_voted_candidate') || null;
@@ -257,6 +256,9 @@
         document.getElementById('user-profile').classList.remove('hidden');
         document.getElementById('user-name').innerText = currentUser.username;
         document.getElementById('user-avatar').src = currentUser.avatar;
+      } else {
+        document.getElementById('login-btn').classList.remove('hidden');
+        document.getElementById('user-profile').classList.add('hidden');
       }
     }
 
@@ -269,6 +271,14 @@
       };
       localStorage.setItem('discord_user', JSON.stringify(currentUser));
       updateAuthUI();
+      fetchCandidates();
+    }
+
+    function logout() {
+      localStorage.removeItem('discord_user');
+      currentUser = null;
+      updateAuthUI();
+      alert('Logged out successfully.');
     }
 
     async function fetchCandidates() {
@@ -284,7 +294,7 @@
 
     async function registerCandidate() {
       if (!currentUser) {
-        alert('Please login with Discord to register!');
+        alert('You must log in with Discord first to register!');
         return;
       }
 
@@ -302,7 +312,7 @@
       });
 
       if (res.ok) {
-        alert('Registered for Unfiltered Girl Owner Event!');
+        alert('Successfully registered for the Girl Owner Event!');
         fetchCandidates();
       } else {
         const data = await res.json();
@@ -312,11 +322,11 @@
 
     async function castVote(candidateId) {
       if (!currentUser) {
-        alert('Please login to vote!');
+        alert('You must log in to cast your vote!');
         return;
       }
       if (userVote) {
-        alert('You have already used your 1 vote!');
+        alert('You have already used your 1 official vote!');
         return;
       }
 
@@ -329,7 +339,10 @@
       if (res.ok) {
         userVote = candidateId;
         localStorage.setItem('user_voted_candidate', candidateId);
+        alert('Vote cast successfully!');
         fetchCandidates();
+      } else {
+        alert('Failed to cast vote.');
       }
     }
 
@@ -378,8 +391,8 @@
               <img src="${c.avatar}" class="w-7 h-7 rounded-full" />
               <span class="text-xs font-bold text-white">${c.name}</span>
             </div>
-            <button onclick="castVote('${c.id}')" ${userVote ? 'disabled' : ''} class="px-3 py-1 text-xs font-bold rounded-lg transition ${hasVotedThis ? 'bg-emerald-700 text-white' : userVote ? 'bg-gray-800 text-gray-500' : 'btn-emerald text-white'}">
-              ${hasVotedThis ? 'Voted ✓' : 'Vote'}
+            <button onclick="castVote('${c.id}')" ${userVote || !currentUser ? 'disabled' : ''} class="px-3 py-1 text-xs font-bold rounded-lg transition ${hasVotedThis ? 'bg-emerald-700 text-white' : userVote || !currentUser ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'btn-emerald text-white'}">
+              ${hasVotedThis ? 'Voted ✓' : !currentUser ? 'Login to Vote' : 'Vote'}
             </button>
           </div>`;
       });
