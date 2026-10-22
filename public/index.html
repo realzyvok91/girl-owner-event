@@ -71,13 +71,13 @@
 </head>
 <body class="min-h-screen flex flex-col justify-between relative">
 
-  <!-- 3D Three.js Ambient Scene -->
+  <!-- 3D Three.js Ambient Particle Canvas -->
   <div id="canvas-container"></div>
 
   <!-- UI Overlay -->
   <div class="relative z-10 flex flex-col min-h-screen">
 
-    <!-- Navbar -->
+    <!-- Header Navbar -->
     <header class="glass-nav sticky top-0 z-50 px-6 py-4 flex justify-between items-center shadow-lg">
       <div class="flex items-center space-x-3.5">
         <div class="w-10 h-10 rounded-xl bg-emerald-950 border border-emerald-400/40 flex items-center justify-center shadow-md font-extrabold text-emerald-400 text-sm tracking-wider">
@@ -92,13 +92,15 @@
       </div>
 
       <div id="auth-section">
-        <button id="login-btn" onclick="loginDemo()" class="px-4 py-2 btn-emerald text-white font-bold text-xs rounded-xl flex items-center gap-2 transition">
+        <button id="login-btn" onclick="loginWithDiscord()" class="px-4 py-2 btn-emerald text-white font-bold text-xs rounded-xl flex items-center gap-2 transition">
           <i class="fa-brands fa-discord text-sm"></i> Login with Discord
         </button>
         <div id="user-profile" class="hidden flex items-center gap-2.5 bg-emerald-950/90 border border-emerald-700/60 px-3 py-1.5 rounded-xl">
           <img id="user-avatar" class="w-7 h-7 rounded-full border border-emerald-400" src="" />
           <span id="user-name" class="text-xs font-semibold text-emerald-100"></span>
-          <button onclick="logout()" class="ml-2 text-xs text-red-400 hover:text-red-300 font-bold"><i class="fa-solid fa-right-from-bracket"></i></button>
+          <button onclick="logout()" title="Logout" class="ml-2 text-xs text-red-400 hover:text-red-300 font-bold">
+            <i class="fa-solid fa-right-from-bracket"></i>
+          </button>
         </div>
       </div>
     </header>
@@ -116,7 +118,7 @@
             Choose Our Next <span class="gradient-text">Girl Owner</span>
           </h2>
           <p class="text-gray-300 text-sm max-w-md leading-relaxed">
-            Represent <strong class="text-emerald-400">Unfiltered</strong>! Active chat, voice channel time tracked by our bot, and community votes decide our next Girl Owner.
+            Represent <strong class="text-emerald-400">Unfiltered</strong>! Active chat messages and voice channel time are tracked live by our bot, combined with community votes.
           </p>
         </div>
 
@@ -181,7 +183,7 @@
 
   </div>
 
-  <!-- 3D Three.js Ambient Particle Background -->
+  <!-- 3D Three.js Ambient Scene Script -->
   <script>
     const container = document.getElementById('canvas-container');
     const scene = new THREE.Scene();
@@ -244,11 +246,31 @@
     });
   </script>
 
-  <!-- App Data & Auth Script -->
+  <!-- Real OAuth2 Discord Auth & Leaderboard Script -->
   <script>
     let currentUser = JSON.parse(localStorage.getItem('discord_user')) || null;
     let userVote = localStorage.getItem('user_voted_candidate') || null;
     let candidatesData = [];
+
+    // Parse OAuth callback response from server URL
+    window.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const loginSuccess = urlParams.get('login_success');
+
+      if (loginSuccess) {
+        try {
+          const user = JSON.parse(decodeURIComponent(loginSuccess));
+          localStorage.setItem('discord_user', JSON.stringify(user));
+          currentUser = user;
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (e) {
+          console.error('Login parse error:', e);
+        }
+      }
+
+      updateAuthUI();
+      fetchCandidates();
+    });
 
     function updateAuthUI() {
       if (currentUser) {
@@ -262,23 +284,15 @@
       }
     }
 
-    function loginDemo() {
-      const id = 'user_' + Math.floor(1000 + Math.random() * 9000);
-      currentUser = {
-        id,
-        username: 'UnfilteredMember#' + id.slice(-4),
-        avatar: 'https://cdn.discordapp.com/embed/avatars/0.png'
-      };
-      localStorage.setItem('discord_user', JSON.stringify(currentUser));
-      updateAuthUI();
-      fetchCandidates();
+    function loginWithDiscord() {
+      window.location.href = '/api/auth/discord';
     }
 
     function logout() {
       localStorage.removeItem('discord_user');
       currentUser = null;
       updateAuthUI();
-      alert('Logged out successfully.');
+      fetchCandidates();
     }
 
     async function fetchCandidates() {
@@ -288,17 +302,17 @@
         renderLeaderboard();
         renderVoting();
       } catch (e) {
-        console.log('API sync...', e);
+        console.log('Fetching candidates...', e);
       }
     }
 
     async function registerCandidate() {
       if (!currentUser) {
-        alert('You must log in with Discord first to register!');
+        alert('Please log in with Discord first to register!');
         return;
       }
 
-      const name = prompt('Enter your Display Name for Unfiltered:', currentUser.username);
+      const name = prompt('Enter candidate display name:', currentUser.username);
       if (!name) return;
 
       const res = await fetch('/api/register', {
@@ -312,21 +326,21 @@
       });
 
       if (res.ok) {
-        alert('Successfully registered for the Girl Owner Event!');
+        alert('Successfully registered as candidate!');
         fetchCandidates();
       } else {
         const data = await res.json();
-        alert(data.error || 'Registration failed');
+        alert(data.error || 'Registration failed.');
       }
     }
 
     async function castVote(candidateId) {
       if (!currentUser) {
-        alert('You must log in to cast your vote!');
+        alert('Please log in with Discord to vote!');
         return;
       }
       if (userVote) {
-        alert('You have already used your 1 official vote!');
+        alert('You have already used your 1 vote!');
         return;
       }
 
@@ -342,7 +356,7 @@
         alert('Vote cast successfully!');
         fetchCandidates();
       } else {
-        alert('Failed to cast vote.');
+        alert('Vote failed.');
       }
     }
 
@@ -398,8 +412,6 @@
       });
     }
 
-    updateAuthUI();
-    fetchCandidates();
     setInterval(fetchCandidates, 3000);
   </script>
 </body>
