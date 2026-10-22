@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const https = require('https');
 const { Client, GatewayIntentBits } = require('discord.js');
 
 const app = express();
@@ -13,7 +12,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // --- CONFIGURATION ---
 const ADMIN_USER_ID = '1139956195696836701';
-const GUILD_ID = 'YOUR_DISCORD_GUILD_ID'; // Optional: replace with your server ID if needed
 const REQUIRED_ROLE_ID = '1547310077197815888';
 const BOT_TOKEN = 'MTU2MjczNDQ3NDI0MzA4ODQxNg.Gao1e7.GGpU5j3bEka3Xh_miXkKLYH3sS6sndXDFo-Qlo';
 
@@ -72,10 +70,9 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.login(BOT_TOKEN).catch(err => console.error('Bot login error:', err));
 
-// Helper to check if a user has the required role using discord.js client cache/fetch
+// Strict Role Verification Function across Bot Guilds
 async function verifyUserRole(userId) {
   try {
-    // Search across cached guilds where the bot is present
     for (const [guildId, guild] of client.guilds.cache) {
       try {
         const member = await guild.members.fetch(userId);
@@ -83,7 +80,7 @@ async function verifyUserRole(userId) {
           return true;
         }
       } catch (e) {
-        // Member not in this specific guild, continue searching
+        // Member not found in this guild cache, check next
       }
     }
     return false;
@@ -110,7 +107,7 @@ app.get('/api/status', (req, res) => {
   res.json(eventState);
 });
 
-// Candidate Registration (Enforces Role Check)
+// Candidate Registration (Strictly checks for role ID 1547310077197815888)
 app.post('/api/register', async (req, res) => {
   const { id, name, avatar } = req.body;
   if (!id || !name) return res.status(400).json({ error: 'Missing details' });
@@ -118,10 +115,9 @@ app.post('/api/register', async (req, res) => {
   const existing = eventState.candidates.find(c => c.id === id);
   if (existing) return res.status(400).json({ error: 'Already registered!' });
 
-  // Verify role requirement
   const hasRole = await verifyUserRole(id);
   if (!hasRole) {
-    return res.status(403).json({ error: 'Access denied: Only members with the "・ Hawties ・ ᶻz ・" role can participate!' });
+    return res.status(403).json({ error: 'Access denied: Only members with the required role can participate in this event!' });
   }
 
   eventState.candidates.push({
@@ -161,7 +157,7 @@ app.post('/api/vote', (req, res) => {
   }
 });
 
-// --- ADMIN ENDPOINTS ---
+// --- ADMIN CONTROL ENDPOINTS ---
 app.post('/api/admin/start', verifyAdmin, (req, res) => {
   eventState.active = true;
   eventState.startTime = Date.now();
@@ -181,7 +177,7 @@ app.post('/api/admin/reset', verifyAdmin, (req, res) => {
   res.json({ success: true, eventState });
 });
 
-// Admin Remove Specific Participant
+// Admin Remove Participant Endpoint
 app.post('/api/admin/remove-candidate', verifyAdmin, (req, res) => {
   const { candidateId } = req.body;
   const index = eventState.candidates.findIndex(c => c.id === candidateId);
