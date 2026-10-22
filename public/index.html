@@ -308,7 +308,7 @@
                 avatar: avatarUrl
               };
               localStorage.setItem('discord_user', JSON.stringify(currentUser));
-              window.history.replaceState({}, document.title, window.location.pathname);
+              window.history.replaceState({}, document.title, '/');
             }
           } catch (err) {
             console.error('OAuth profile error:', err);
@@ -352,7 +352,7 @@
     }
 
     function loginWithDiscord() {
-      const redirectUri = 'https://girl-owner-event.onrender.com/api/auth/discord/callback';
+      const redirectUri = 'https://girl-owner-event.onrender.com/';
       const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=identify`;
       window.location.href = authUrl;
     }
@@ -435,7 +435,7 @@
       });
 
       if (res.ok) {
-        alert('Registered successfully! Role verified.');
+        alert('Registered successfully!');
         fetchStatus();
       } else {
         const data = await res.json();
@@ -561,7 +561,7 @@
         return;
       }
 
-      let sorted = [...candidates].sort((a, b) => (b.chatXp + (b.vcHours * 100) + (b.votes * 50)) - (a.chatXp + (a.vcHours * 100) + (a.votes * 50)));
+      let sorted = [...candidates].sort((a, b) => (b.chatXp + (b.vcHours * 100) + (b.votes * 50)) - (a.chatXp + (a.vcHours * 100) + (b.votes * 50)));
 
       list.innerHTML = '';
       sorted.forEach((c, idx) => {
