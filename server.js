@@ -10,6 +10,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// --- RESTRICTED ADMIN CONFIGURATION ---
+const ADMIN_USER_ID = '1139956195696836701';
+
 // --- EVENT STATE ---
 let eventState = {
   active: false,
@@ -67,15 +70,23 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.login(BOT_TOKEN).catch(err => console.error('Bot login error:', err));
 
-// --- API ENDPOINTS ---
+// --- ADMIN SECURITY MIDDLEWARE ---
+function verifyAdmin(req, res, next) {
+  const userId = req.headers['x-user-id'];
+  if (userId === ADMIN_USER_ID) {
+    next();
+  } else {
+    res.status(403).json({ error: 'Unauthorized: Admin access denied.' });
+  }
+}
+
+// --- PUBLIC API ENDPOINTS ---
 app.get('/ping', (req, res) => res.send('OK'));
 
-// Get current event status & candidates
 app.get('/api/status', (req, res) => {
   res.json(eventState);
 });
 
-// Candidate Registration
 app.post('/api/register', (req, res) => {
   const { id, name, avatar } = req.body;
   if (!id || !name) return res.status(400).json({ error: 'Missing details' });
@@ -95,7 +106,6 @@ app.post('/api/register', (req, res) => {
   res.json({ success: true });
 });
 
-// Vote Endpoint
 app.post('/api/vote', (req, res) => {
   if (!eventState.active) return res.status(400).json({ error: 'Event is not active!' });
 
@@ -109,19 +119,19 @@ app.post('/api/vote', (req, res) => {
   }
 });
 
-// --- ADMIN CONTROL ENDPOINTS ---
-app.post('/api/admin/start', (req, res) => {
+// --- PROTECTED ADMIN ENDPOINTS ---
+app.post('/api/admin/start', verifyAdmin, (req, res) => {
   eventState.active = true;
   eventState.startTime = Date.now();
   res.json({ success: true, eventState });
 });
 
-app.post('/api/admin/pause', (req, res) => {
+app.post('/api/admin/pause', verifyAdmin, (req, res) => {
   eventState.active = false;
   res.json({ success: true, eventState });
 });
 
-app.post('/api/admin/reset', (req, res) => {
+app.post('/api/admin/reset', verifyAdmin, (req, res) => {
   eventState.active = false;
   eventState.startTime = null;
   eventState.candidates = [];
