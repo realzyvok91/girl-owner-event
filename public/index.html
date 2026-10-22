@@ -91,12 +91,9 @@
         </div>
       </div>
 
-      <div id="auth-section" class="flex items-center gap-2">
+      <div id="auth-section">
         <button id="login-btn" onclick="loginWithDiscord()" class="px-4 py-2 btn-emerald text-white font-bold text-xs rounded-xl flex items-center gap-2 transition">
           <i class="fa-brands fa-discord text-sm"></i> Login with Discord
-        </button>
-        <button onclick="quickLoginPrompt()" class="px-3 py-2 bg-emerald-950 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-300 font-bold text-xs rounded-xl transition" title="Direct Login if IP rate-limited">
-          <i class="fa-solid fa-user-plus"></i> Quick Login
         </button>
         <div id="user-profile" class="hidden flex items-center gap-2.5 bg-emerald-950/90 border border-emerald-700/60 px-3 py-1.5 rounded-xl">
           <img id="user-avatar" class="w-7 h-7 rounded-full border border-emerald-400" src="" />
@@ -290,22 +287,6 @@
       window.location.href = '/api/auth/discord';
     }
 
-    // Direct Login Fallback to bypass Cloudflare IP restrictions
-    function quickLoginPrompt() {
-      const username = prompt('Enter your Discord Username:', 'Zyvok');
-      if (!username) return;
-
-      currentUser = {
-        id: 'user_' + Math.floor(100000 + Math.random() * 900000),
-        username: username,
-        avatar: 'https://cdn.discordapp.com/embed/avatars/0.png'
-      };
-      localStorage.setItem('discord_user', JSON.stringify(currentUser));
-      updateAuthUI();
-      alert('Logged in successfully via Quick Login!');
-      fetchCandidates();
-    }
-
     function logout() {
       localStorage.removeItem('discord_user');
       currentUser = null;
@@ -326,7 +307,7 @@
 
     async function registerCandidate() {
       if (!currentUser) {
-        alert('Please log in first to register!');
+        alert('Please log in with Discord first to register!');
         return;
       }
 
@@ -354,7 +335,7 @@
 
     async function castVote(candidateId) {
       if (!currentUser) {
-        alert('Please log in to vote!');
+        alert('Please log in with Discord to vote!');
         return;
       }
       if (userVote) {
@@ -385,7 +366,7 @@
         return;
       }
 
-      let sorted = [...candidatesData].sort((a, b) => (b.chatXp + (b.vcHours * 100) + (b.votes * 50)) - (a.chatXp + (a.vcHours * 100) + (a.votes * 50)));
+      let sorted = [...candidatesData].sort((a, b) => (b.chatXp + (b.vcHours * 100) + (b.votes * 50)) - (a.chatXp + (a.vcHours * 100) + (b.votes * 50)));
 
       list.innerHTML = '';
       sorted.forEach((c, idx) => {
