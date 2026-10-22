@@ -428,18 +428,22 @@
       const name = prompt('Enter candidate display name:', currentUser.username);
       if (!name) return;
 
-      const res = await fetch('/api/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: currentUser.id, name, avatar: currentUser.avatar })
-      });
+      try {
+        const res = await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: currentUser.id, name, avatar: currentUser.avatar })
+        });
 
-      if (res.ok) {
-        alert('Registered successfully!');
-        fetchStatus();
-      } else {
         const data = await res.json();
-        alert(data.error || 'Registration failed.');
+        if (res.ok) {
+          alert('Registered successfully!');
+          fetchStatus();
+        } else {
+          alert('Registration Blocked: ' + (data.error || 'Unknown server error'));
+        }
+      } catch (err) {
+        alert('Network Request Error: ' + err.message);
       }
     }
 
@@ -561,7 +565,7 @@
         return;
       }
 
-      let sorted = [...candidates].sort((a, b) => (b.chatXp + (b.vcHours * 100) + (b.votes * 50)) - (a.chatXp + (a.vcHours * 100) + (b.votes * 50)));
+      let sorted = [...candidates].sort((a, b) => (b.chatXp + (b.vcHours * 100) + (b.votes * 50)) - (a.chatXp + (b.vcHours * 100) + (b.votes * 50)));
 
       list.innerHTML = '';
       sorted.forEach((c, idx) => {
